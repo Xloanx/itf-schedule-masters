@@ -28,6 +28,7 @@ import {
   User,
   Clock,
   Square,
+  Plus,
 } from "lucide-react";
 
 interface Message {
@@ -219,6 +220,22 @@ const ChatInterface = () => {
     }
   };
 
+   const handleNewChat = () => {
+    // Clear current messages and reset to welcome message
+    const welcomeMessage: Message = {
+      id: Date.now().toString(),
+      type: 'ai',
+      content: `Hello${isSignedIn ? ` ${user?.firstName}` : ''}! I'm your ${schedule?.name} Schedule Master. I'm here to help you with all aspects of ${schedule?.acronym}, including procedures, guidelines, and best practices. ${!isSignedIn ? 'Note: As a guest user, your chat history will not be saved. Consider logging in for a better experience.' : ''} How can I assist you today?`,
+      timestamp: new Date()
+    };
+    setMessages([welcomeMessage]);
+    
+    // Clear from localStorage if user is signed in
+    if (isSignedIn) {
+      localStorage.removeItem(`chat-${scheduleId}-${user?.id}`);
+    }
+  };
+
   if (!schedule) {
     return (
       <div className="min-h-screen bg-background">
@@ -358,6 +375,15 @@ const ChatInterface = () => {
                   Chat with {schedule.acronym} Master
                 </h1>
               </div>
+              <Button 
+                onClick={handleNewChat}
+                variant="outline" 
+                size="sm"
+                className="flex items-center space-x-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>New Chat</span>
+              </Button>
             </div>
 
             {/* Messages Area - Fixed height with scroll */}
