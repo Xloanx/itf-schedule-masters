@@ -84,6 +84,7 @@ const ChatInterface = () => {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const [isTyping, setIsTyping] = useState(false);
 
   const schedule = scheduleId ? getScheduleById(scheduleId) : null;
 
@@ -178,6 +179,7 @@ const ChatInterface = () => {
     // Add user message immediately
     setMessages(prev => [...prev, userMessage]);
     setInput("");
+    setIsTyping(true);
     
     try {
       const response = await fetch(`/api/completion/${scheduleId}`, {
@@ -238,7 +240,9 @@ const ChatInterface = () => {
         timestamp: new Date()
       };
       setMessages(prev => [...prev, errorMessage]);
-    }
+    } finally {
+        setIsTyping(false); // Add this line
+      }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -510,6 +514,7 @@ const ChatInterface = () => {
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => handleRetryMessage(index)}
+                                    disabled={isTyping} // Add this line
                                     className="h-8 px-2 text-muted-foreground hover:text-foreground"
                                   >
                                     <RotateCcw className="w-3 h-3" />
@@ -520,8 +525,8 @@ const ChatInterface = () => {
                         </div>
                       </div>
                     ))}
-                    
-                    {isLoading && (
+
+                    {isTyping && (
                       <div className="flex justify-start">
                         <div className="flex items-end space-x-2">
                           <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center">
