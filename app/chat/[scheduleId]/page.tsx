@@ -85,6 +85,7 @@ const ChatInterface = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [isTyping, setIsTyping] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
   const schedule = scheduleId ? getScheduleById(scheduleId) : null;
 
@@ -269,9 +270,11 @@ const ChatInterface = () => {
     }
   }
 
-    const handleCopyMessage = async (content: string) => {
+  const handleCopyMessage = async (content: string, messageId: string) => {
     try {
       await navigator.clipboard.writeText(content);
+      setCopiedMessageId(messageId);
+      setTimeout(() => setCopiedMessageId(null), 2000); // Reset after 2 seconds
     } catch (err) {
       console.error('Failed to copy text: ', err);
     }
@@ -459,7 +462,7 @@ const ChatInterface = () => {
                     {messages.map((msg,index) => (
                       <div key={msg.id} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
                         <div className={`max-w-[80%] ${msg.type === 'user' ? 'order-2' : 'order-1'}`}>
-                          <div className={`flex items-end space-x-2 ${msg.type === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}>
+                          <div className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                               msg.type === 'user' ? 'bg-primary' : 'bg-secondary'
                             }`}>
@@ -483,45 +486,56 @@ const ChatInterface = () => {
                                 {msg.timestamp.toLocaleTimeString()}
                               </p>
                             </div>
-                             {/* Action buttons for AI messages only */}
-                              {msg.type === 'ai' && (
-                                <div className="flex items-center space-x-1 px-2">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleCopyMessage(msg.content)}
-                                    className="h-8 px-2 text-muted-foreground hover:text-foreground"
-                                  >
-                                    <Copy className="w-3 h-3" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleThumbsUp(msg.id)}
-                                    className="h-8 px-2 text-muted-foreground hover:text-green-600"
-                                  >
-                                    <ThumbsUp className="w-3 h-3" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleThumbsDown(msg.id)}
-                                    className="h-8 px-2 text-muted-foreground hover:text-red-600"
-                                  >
-                                    <ThumbsDown className="w-3 h-3" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleRetryMessage(index)}
-                                    disabled={isTyping} // Add this line
-                                    className="h-8 px-2 text-muted-foreground hover:text-foreground"
-                                  >
-                                    <RotateCcw className="w-3 h-3" />
-                                  </Button>
-                                </div>
-                              )}
                           </div>
+                          
+                          {/* Action buttons for AI messages only - moved outside the message bubble */}
+                          {msg.type === 'ai' && (
+                            <div className="flex items-center space-x-1 mt-2 ml-10"> {/* Added ml-10 for proper indentation */}
+                              <div className="relative">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleCopyMessage(msg.content, msg.id)}
+                                  disabled={isTyping}
+                                  className="h-8 px-2 text-muted-foreground hover:text-foreground"
+                                >
+                                  <Copy className="w-3 h-3" />
+                                </Button>
+                                {copiedMessageId === msg.id && (
+                                  <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded-md">
+                                    Copied!
+                                  </span>
+                                )}
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleThumbsUp(msg.id)}
+                                disabled={isTyping}
+                                className="h-8 px-2 text-muted-foreground hover:text-green-600"
+                              >
+                                <ThumbsUp className="w-3 h-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleThumbsDown(msg.id)}
+                                disabled={isTyping}
+                                className="h-8 px-2 text-muted-foreground hover:text-red-600"
+                              >
+                                <ThumbsDown className="w-3 h-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRetryMessage(index)}
+                                disabled={isTyping}
+                                className="h-8 px-2 text-muted-foreground hover:text-foreground"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
