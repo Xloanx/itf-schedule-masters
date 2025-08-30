@@ -29,6 +29,10 @@ import {
   Clock,
   Square,
   Plus,
+  Copy,
+  ThumbsUp,
+  ThumbsDown,
+  RotateCcw
 } from "lucide-react";
 
 interface Message {
@@ -127,49 +131,46 @@ const ChatInterface = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    
-    if (!input.trim()) return;
+const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  e.preventDefault();
+  
+  if (!input.trim()) return;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      type: 'user',
-      content: input,
-      timestamp: new Date()
-    };
-    
-    // Add user message immediately
-    setMessages(prev => [...prev, userMessage]);
-    setInput("");
-    
-    // Create a custom event to trigger the completion
-    const event = {
-      preventDefault: () => {},
-      // We need to include the messages in the request body
-    } as React.FormEvent<HTMLFormElement>;
-    
-    // Manually call the completion API
-    fetch(`/api/completion/${scheduleId}`, {
+  const userMessage: Message = {
+    id: Date.now().toString(),
+    type: 'user',
+    content: input,
+    timestamp: new Date()
+  };
+  
+  // Calculate the new state first
+  const updatedMessages = [...messages, userMessage];
+  
+  // Update the UI optimistically
+  setMessages(updatedMessages);
+  setInput("");
+  
+  try {
+    const response = await fetch(`/api/completion/${scheduleId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        messages: [...messages, userMessage],
+        messages: updatedMessages, // Use the calculated new state
       }),
-    })
-    .then(response => {
-      if (!response.ok) {
-        throw new Error('Failed to get AI response');
-      }
-      
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to get AI response');
+    }
+
       // Handle the streaming response
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let accumulatedText = '';
-      
-      if (reader) {
+    
+    if (reader) {
         const readChunk = () => {
           reader.read().then(({ value, done }) => {
             if (done) {
@@ -199,18 +200,19 @@ const ChatInterface = () => {
         
         readChunk();
       }
-    })
-    .catch(error => {
-      console.error('Error:', error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        type: 'ai',
-        content: "Sorry, I'm having trouble responding right now. Please try again.",
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    });
-  };
+    
+  } catch (error) {
+    console.error('Error:', error);
+    const errorMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      type: 'ai',
+      content: "Sorry, I'm having trouble responding right now. Please try again.",
+      timestamp: new Date()
+    };
+    // Add the error message to the latest state
+    setMessages(prev => [...prev, errorMessage]);
+  }
+};
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -234,7 +236,50 @@ const ChatInterface = () => {
     if (isSignedIn) {
       localStorage.removeItem(`chat-${scheduleId}-${user?.id}`);
     }
+  }
+
+    const handleCopyMessage = async (content: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+    }
   };
+
+  const handleThumbsUp = (messageId: string) => {
+    // Visual feedback for thumbs up - could save to analytics later
+    console.log('Thumbs up for message:', messageId);
+  };
+
+  const handleThumbsDown = (messageId: string) => {
+    // Visual feedback for thumbs down - could save to analytics later
+    console.log('Thumbs down for message:', messageId);
+  };
+
+  const handleRetryMessage = (messageIndex: number) => {
+    if (messageIndex < 1) return; // Can't retry if no previous user message
+    
+    const userMessage = messages[messageIndex - 1];
+    if (userMessage.type !== 'user') return;
+    
+    // Remove the AI message that we're retrying
+    const updatedMessages = messages.slice(0, messageIndex);
+    setMessages(updatedMessages);
+    // setIsTyping(true);
+
+    // Generate new AI response
+    // setTimeout(() => {
+    //   const aiMessage: Message = {
+    //     id: Date.now().toString(),
+    //     type: 'ai',
+    //     content: generateAIResponse(userMessage.content, schedule),
+    //     timestamp: new Date()
+    //   };
+    //   setMessages(prev => [...prev, aiMessage]);
+    //   setIsTyping(false);
+    // }, 2000);
+  };
+
 
   if (!schedule) {
     return (
@@ -393,7 +438,7 @@ const ChatInterface = () => {
                   <div className="space-y-4">
                     {error && <div className="text-red-500 text-sm mb-4">{error.message}</div>}
                     
-                    {messages.map((msg) => (
+                    {messages.map((msg,index) => (
                       <div key={msg.id} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
                         <div className={`max-w-[80%] ${msg.type === 'user' ? 'order-2' : 'order-1'}`}>
                           <div className={`flex items-end space-x-2 ${msg.type === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}>
@@ -416,6 +461,46 @@ const ChatInterface = () => {
                                 {msg.timestamp.toLocaleTimeString()}
                               </p>
                             </div>
+                             {/* Action buttons for AI messages only */}
+                              {msg.type === 'ai' && (
+                                <div className="flex items-center space-x-1 px-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleCopyMessage(msg.content)}
+                                    className="h-8 px-2 text-muted-foreground hover:text-foreground"
+                                  >
+                                    <Copy className="w-3 h-3" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleThumbsUp(msg.id)}
+                                    className="h-8 px-2 text-muted-foreground hover:text-green-600"
+                                  >
+                                    <ThumbsUp className="w-3 h-3" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleThumbsDown(msg.id)}
+                                    className="h-8 px-2 text-muted-foreground hover:text-red-600"
+                                  >
+                                    <ThumbsDown className="w-3 h-3" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleRetryMessage(index)}
+                                    // disabled={
+                                    //   // isTyping
+                                    // }
+                                    className="h-8 px-2 text-muted-foreground hover:text-foreground"
+                                  >
+                                    <RotateCcw className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              )}
                           </div>
                         </div>
                       </div>
