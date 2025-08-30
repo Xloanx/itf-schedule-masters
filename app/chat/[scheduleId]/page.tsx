@@ -43,6 +43,38 @@ interface Message {
   attachments?: { type: string; name: string }[];
 }
 
+// Markdown renderer component
+const MarkdownRenderer = ({ content }: { content: string }) => {
+  const renderMarkdown = (text: string) => {
+    // Convert headers
+    text = text.replace(/### (.*?)(\n|$)/g, '<h3>$1</h3>');
+    text = text.replace(/## (.*?)(\n|$)/g, '<h2>$1</h2>');
+    text = text.replace(/# (.*?)(\n|$)/g, '<h1>$1</h1>');
+    
+    // Convert bold text
+    text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    
+    // Convert italic text
+    text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    
+    // Convert lists
+    text = text.replace(/^- (.*?)(\n|$)/g, '<li>$1</li>');
+    text = text.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
+    
+    // Convert line breaks
+    text = text.replace(/\n/g, '<br />');
+    
+    return text;
+  };
+
+  return (
+    <div 
+      className="markdown-content"
+      dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }}
+    />
+  );
+};
+
 const ChatInterface = () => {
   const { isSignedIn, user } = useUser();
   const params = useParams();
@@ -131,46 +163,43 @@ const ChatInterface = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-  e.preventDefault();
-  
-  if (!input.trim()) return;
-
-  const userMessage: Message = {
-    id: Date.now().toString(),
-    type: 'user',
-    content: input,
-    timestamp: new Date()
-  };
-  
-  // Calculate the new state first
-  const updatedMessages = [...messages, userMessage];
-  
-  // Update the UI optimistically
-  setMessages(updatedMessages);
-  setInput("");
-  
-  try {
-    const response = await fetch(`/api/completion/${scheduleId}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messages: updatedMessages, // Use the calculated new state
-      }),
-    });
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
     
-    if (!response.ok) {
-      throw new Error('Failed to get AI response');
-    }
+    if (!input.trim()) return;
 
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      type: 'user',
+      content: input,
+      timestamp: new Date()
+    };
+    
+    // Add user message immediately
+    setMessages(prev => [...prev, userMessage]);
+    setInput("");
+    
+    try {
+      const response = await fetch(`/api/completion/${scheduleId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [...messages, userMessage],
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to get AI response');
+      }
+      
       // Handle the streaming response
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let accumulatedText = '';
-    
-    if (reader) {
+      
+      if (reader) {
         const readChunk = () => {
           reader.read().then(({ value, done }) => {
             if (done) {
@@ -200,19 +229,17 @@ const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         
         readChunk();
       }
-    
-  } catch (error) {
-    console.error('Error:', error);
-    const errorMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      type: 'ai',
-      content: "Sorry, I'm having trouble responding right now. Please try again.",
-      timestamp: new Date()
-    };
-    // Add the error message to the latest state
-    setMessages(prev => [...prev, errorMessage]);
-  }
-};
+    } catch (error) {
+      console.error('Error:', error);
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'ai',
+        content: "Sorry, I'm having trouble responding right now. Please try again.",
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    }
+  };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -265,19 +292,6 @@ const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     // Remove the AI message that we're retrying
     const updatedMessages = messages.slice(0, messageIndex);
     setMessages(updatedMessages);
-    // setIsTyping(true);
-
-    // Generate new AI response
-    // setTimeout(() => {
-    //   const aiMessage: Message = {
-    //     id: Date.now().toString(),
-    //     type: 'ai',
-    //     content: generateAIResponse(userMessage.content, schedule),
-    //     timestamp: new Date()
-    //   };
-    //   setMessages(prev => [...prev, aiMessage]);
-    //   setIsTyping(false);
-    // }, 2000);
   };
 
 
@@ -456,7 +470,11 @@ const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
                                 ? 'bg-primary text-primary-foreground' 
                                 : 'bg-muted text-foreground'
                             }`}>
-                              <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                              {msg.type === 'ai' ? (
+                                <MarkdownRenderer content={msg.content} />
+                              ) : (
+                                <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                              )}
                               <p className="text-xs opacity-70 mt-2">
                                 {msg.timestamp.toLocaleTimeString()}
                               </p>
@@ -492,9 +510,6 @@ const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => handleRetryMessage(index)}
-                                    // disabled={
-                                    //   // isTyping
-                                    // }
                                     className="h-8 px-2 text-muted-foreground hover:text-foreground"
                                   >
                                     <RotateCcw className="w-3 h-3" />
@@ -573,6 +588,44 @@ const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
           </div>
         </div>
       </div>
+
+      <style jsx>{`
+        .markdown-content h1, .markdown-content h2, .markdown-content h3 {
+          margin-top: 0.5rem;
+          margin-bottom: 0.5rem;
+          font-weight: 600;
+        }
+        
+        .markdown-content h1 {
+          font-size: 1.5rem;
+        }
+        
+        .markdown-content h2 {
+          font-size: 1.25rem;
+        }
+        
+        .markdown-content h3 {
+          font-size: 1.1rem;
+        }
+        
+        .markdown-content strong {
+          font-weight: 700;
+        }
+        
+        .markdown-content em {
+          font-style: italic;
+        }
+        
+        .markdown-content ul {
+          list-style-type: disc;
+          padding-left: 1.5rem;
+          margin: 0.5rem 0;
+        }
+        
+        .markdown-content li {
+          margin: 0.25rem 0;
+        }
+      `}</style>
     </div>
   );
 };
